@@ -1,0 +1,55 @@
+def validate_season(season: str, alternate: bool=False) -> bool:
+    """
+    Validate the season format. It should be in the format 'YYYYREG' or 'YYYYPRE' or 'YYYYPOST' for regular
+    or 'YYYY' for alternate.
+    """
+    import re
+    if alternate:
+        pattern = r"^\d{4}$"
+        return bool(re.match(pattern, season))
+    pattern = r"^\d{4}(REG|PRE|POST)$"
+    return bool(re.match(pattern, season))
+
+def validate_date(s: str) -> bool:
+    """
+    Validate that `s` is either:
+      - 'YYYY-MMM-DD' (e.g. '2017-SEP-25'), or
+      - 'YYYY-MM-DD'  (e.g. '2017-09-25'),
+    and that it represents a real calendar date.
+    """
+    import re
+    from datetime import datetime
+    # Acceptable regex patterns
+    patterns = [
+        r'^\d{4}-[A-Z]{3}-\d{2}$',  # e.g. 2017-SEP-25
+        r'^\d{4}-\d{2}-\d{2}$'      # e.g. 2017-09-25
+    ]
+    s_up = s.upper()
+    if not any(re.fullmatch(p, s_up) for p in patterns):
+        return False
+
+    # Try to parse with either style
+    for fmt in ("%Y-%b-%d", "%Y-%m-%d"):
+        try:
+            datetime.strptime(s_up, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
+
+def validate_season_week(season: str, week: int) -> bool:
+    """
+    Validate that the season and week are in acceptable ranges.
+    """
+    if not validate_season(season):
+        return False
+    match (season[-3:]):
+        case "PRE":
+            return 0 <= week <= 4
+        case "REG":
+            return 1 <= week <= 17        
+        case "POST":
+            return 1 <= week <= 4
+        case _:
+            return False    
+
