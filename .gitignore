@@ -1,2 +1,7 @@
 .env
+.pyest_cache
+.venv
 data/
+
+__pycache__/
+
