@@ -33,4 +33,4 @@ This project will be directed at analyzing live and historical sports performanc
 - [ ] Avoid committing large data files (put them in `/data/` but ignore via `.gitignore`).  
 
 ## Reference Documentation
-Python Yahoo Fantasy API - https://yfpy.uberfastman.com/readme/
+Python Yahoo Fantasy API - https://yahoo-fantasy-api.readthedocs.io/en/latest/yahoo_fantasy_api.html
