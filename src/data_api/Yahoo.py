@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Game:
-    def __init__(self, sc):
-        self.game = game.Game(sc)
+    def __init__(self, sc, code: str="nfl"):
+        self.game = game.Game(sc, code)
 
     def get_game_id(self):
         """
@@ -76,10 +76,10 @@ class League:
         return self.league.stat_categories()
 
 class Yahoo:
-    def __init__(self):
+    def __init__(self, code: str="nfl"):
         # Reuse the tokens saved earlier
         self.sc = OAuth2(None, None, from_file=os.getenv("YAHOO_OAUTH_KEYS_PATH"))
-        self.game = Game(self.sc)
+        self.game = Game(self.sc, code)
 
         league_key = self.game.get_league_ids()[0]  # Assuming we want the first league, it doesn't matter
         self.leagues = League(self.sc, league_key)
