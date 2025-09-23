@@ -31,3 +31,6 @@ This project will be directed at analyzing live and historical sports performanc
 - [ ] Ensure tests are added in `/tests/` matching new features or modules.  
 - [ ] Maintain `pytest.ini` so it includes any new test paths or settings if structure changes.  
 - [ ] Avoid committing large data files (put them in `/data/` but ignore via `.gitignore`).  
+
+## Reference Documentation
+Python Yahoo Fantasy API - https://yfpy.uberfastman.com/readme/

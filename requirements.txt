@@ -6,3 +6,4 @@ pandas>=2.0                # for DataFrame results
 numpy>=1.25                # numeric operations
 pytest>=7.0                # for running tests
 responses          # to mock HTTP calls in tests
+yfpy 
