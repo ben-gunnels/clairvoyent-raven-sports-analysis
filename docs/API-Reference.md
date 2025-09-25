@@ -73,3 +73,128 @@ Provides live play-by-play data, seasonal statistics, and player feeds. Includes
 
 * All method names are shown exactly as used in the API.
 * Ensure correct argument types and valid values (for example, `season="2024REG"`).
+
+## Yahoo Fantasy (Wrapper)
+
+**Description**  
+Thin wrapper around `yahoo_fantasy_api` that provides convenient access to Yahoo Fantasy NFL data via three classes: `Game`, `League`, and `Yahoo`. Uses OAuth2 tokens loaded by `yahoo_oauth.OAuth2`. You must authenticate once to create a token file, then reuse it for future sessions.  
+See official docs: [Yahoo Fantasy API authentication](https://yahoo-fantasy-api.readthedocs.io/en/latest/authentication.html?utm_source=chatgpt.com)
+
+**Upstream APIs / References**  
+- `yahoo_fantasy_api` methods: `game_id()`, `league_ids()`, `player_details()`, `player_stats()`, `positions()`, `stat_categories()`.  
+- Yahoo Fantasy Sports API resource model (game, league, player).  
+- Yahoo OAuth2 / token flow (client keys, redirect, token exchange).
+
+---
+
+### Authentication
+
+Before using the wrapper, you need to:
+
+1. Register a Yahoo developer app and perform an OAuth flow once to obtain tokens (access & refresh).  
+2. Save credentials (consumer key/secret + tokens) in a JSON file.  
+3. Set an environment variable like `YAHOO_OAUTH_KEYS_PATH` pointing to that JSON file.  
+4. In your wrapper’s constructor, do:
+
+```python
+self.sc = OAuth2(None, None, from_file=api_keys)
+```
+
+If tokens are valid or refreshable, the session works without further user intervention.
+
+---
+
+### Argument Conventions
+
+| Parameter       | Type                           | Description |
+|-----------------|--------------------------------|-------------|
+| **code**        | `str`                          | Yahoo sport code (default `"nfl"`) |
+| **league_key**  | `str`                          | Identifier for a Yahoo league (e.g. `nfl.l.12345`) |
+| **player**      | `str \| int \| list[int]`      | Either a name prefix or one or more Yahoo player IDs |
+| **req_type**    | `str`                          | One of: `season`, `average_season`, `lastweek`, `lastmonth`, `date`, `week` for stats queries |
+
+---
+
+## API Namespaces & Methods
+
+### `Game`
+
+Wrapper around `yahoo_fantasy_api.game.Game`:
+
+| Method              | Returns          | Description |
+|---------------------|------------------|-------------|
+| `get_game_id()`     | `int`            | Yahoo game identifier (for that sport + year) |
+| `get_league_ids()`  | `list[str]`      | League identifiers accessible by the authorized user |
+
+---
+
+### `League`
+
+Wrapper around `yahoo_fantasy_api.league.League`, returning `pandas.DataFrame` in many cases:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_current_week()` | `int` | Current week number for the league |
+| `get_draft_results()` | `pd.DataFrame` | The draft results (rounds, picks, players) |
+| `get_end_week()` | `int` | Final week number for the season |
+| `get_percent_owned(player_ids)` | `pd.DataFrame` | Percent-owned statistics for specified players |
+| `get_player_details(player)` | `pd.DataFrame` | Detailed player metadata (search or ID lookup) |
+| `get_player_stats(player_ids, req_type, date=None, week=None, season=None)` | `pd.DataFrame` | Player statistics by request type |
+| `get_positions()` | `pd.DataFrame` | List of positions used in the league |
+| `get_stat_categories()` | `pd.DataFrame` | Statistical categories definitions for league scoring |
+
+---
+
+### `Yahoo`
+
+High-level facade that initializes the OAuth session, picks a league, and provides direct access:
+
+- **Constructor**:
+  ```python
+  Yahoo(api_keys=os.getenv("YAHOO_OAUTH_KEYS_PATH"), code="nfl")
+  ```
+  
+- Internally it:
+  1. Initializes `OAuth2` session  
+  2. Constructs `Game(self.sc, code)`  
+  3. Retrieves `league_ids()` and selects one (default logic)  
+  4. Builds `League(self.sc, league_key)`
+
+---
+
+## Example Usage
+
+```python
+from src.data_api.Yahoo import Yahoo
+
+y = Yahoo()  # assumes YAHOO_OAUTH_KEYS_PATH is set properly
+
+# Game-level
+game_id = y.game.get_game_id()
+league_ids = y.game.get_league_ids()
+
+# League-level
+current_week = y.league.get_current_week()
+draft_df = y.league.get_draft_results()
+
+# Player lookup
+df_by_name = y.league.get_player_details("Taylor")
+df_by_ids = y.league.get_player_details([12345, 67890])
+
+# Player stats (season / weekly)
+season_stats = y.league.get_player_stats([12345], req_type="season", season=2025)
+weekly_stats = y.league.get_player_stats(12345, req_type="week", week=3)
+
+positions = y.league.get_positions()
+stat_cats = y.league.get_stat_categories()
+```
+
+---
+
+### Troubleshooting & Tips
+
+- **FileNotFoundError on OAuth JSON**: Verify that the env var `YAHOO_OAUTH_KEYS_PATH` points to an existing JSON file. Use absolute paths when possible.  
+- **Missing `access_token` in JSON**: If the JSON lacks tokens after your first run, the OAuth flow likely failed. Re-run the authorization process so tokens are persisted.  
+- **Multiple leagues / selection logic**: The wrapper uses a default choice (last league ID). You may want to adjust logic to pick a specific league.
+
+
