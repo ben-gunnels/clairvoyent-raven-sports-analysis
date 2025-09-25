@@ -1,3 +1,5 @@
+import pandas as pd
+
 def validate_season(season: str, alternate: bool=False) -> bool:
     """
     Validate the season format. It should be in the format 'YYYYREG' or 'YYYYPRE' or 'YYYYPOST' for regular
@@ -53,3 +55,21 @@ def validate_season_week(season: str, week: int) -> bool:
         case _:
             return False    
 
+def describe_endpoint(name, df):
+    """Formats the DataFrame info string for writing."""
+    buf = []
+    buf.append(f"Endpoint: {name}")
+    buf.append("-" * 50)
+    # Capture the output of df.info()
+    from io import StringIO
+    s = StringIO()
+    if type(df) is pd.DataFrame:
+        df.info(buf=s)
+    else:
+        buf.append(f"Type: {type(df)}")
+        buf.append("Not a DataFrame.")
+    s.seek(0)
+    buf.append(s.read().rstrip())
+    buf.append("-"*50)
+    buf.append("\n")  # blank line between endpoints
+    return "\n".join(buf)

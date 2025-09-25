@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import typing
 
-from src.utils import validate_date, validate_season, validate_season_week
+from utils import validate_date, validate_season, validate_season_week
 
 from dotenv import load_dotenv
 load_dotenv()
