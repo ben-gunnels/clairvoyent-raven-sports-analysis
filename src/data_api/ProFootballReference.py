@@ -65,6 +65,13 @@ class PFR: # Pro-Football Reference
         return self.player_dict.get(player, None) # Return the link
     
     def get_player_stats(self, name: str, year: str | int = None) -> pd.DataFrame:
+        """
+            Returns a dataframe of a player's seasonal stats by a requested season if passed.
+            Tries to match the best name to the query name using fuzzy matching.
+            WARNING:
+                IF BEING USED DURING ITERATION, ENFORCE RATE LIMITING TO AVOID BEING BLOCKED BY PFR'S SERVER.
+                IT IS RECOMMENDED TO WAIT 5 SECONDS BETWEEN QUERIES.
+        """
         player_link = self._search_link_from_name(name)
 
         if not player_link:
@@ -85,9 +92,10 @@ class PFR: # Pro-Football Reference
         # Final Normalization
         # Make the year_id = column_id for each column
         for year in stats_df:
+            stats_df["query_name"] = name # Save the query name for matching later
             stats_df.loc["year_id", year] = year
 
-        return stats_df
+        return stats_df.T # Transpose the columns and rows
 
 if __name__ == "__main__":
     alphabet_capitalized = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
