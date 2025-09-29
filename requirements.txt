@@ -9,3 +9,4 @@ responses          # to mock HTTP calls in tests
 yahoo_oauth>=0.5.0          # for Yahoo OAuth2 authentication 
 yahoo-fantasy-api>=2.0.0   # for accessing Yahoo Fantasy Sports API
 pytest-mock>=3.10.0        # for mocking in pytest
+rapidfuzz
