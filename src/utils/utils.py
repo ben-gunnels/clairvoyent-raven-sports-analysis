@@ -1,4 +1,36 @@
 import pandas as pd
+import json
+import logging
+from pathlib import Path
+from typing import Any, Optional
+
+def safe_json_load(path: str | Path, default: Optional[Any] = None) -> Any:
+    """
+    Safely load JSON from a file.
+    
+    Returns:
+        - Parsed JSON (dict, list, etc.)
+        - `None` or the `default` you specify if the file is missing,
+          empty, invalid JSON, or contains just whitespace.
+    """
+    try:
+        path = Path(path)
+        if not path.exists():
+            logging.warning("File not found: %s", path)
+            return default
+        
+        if path.stat().st_size == 0:
+            logging.warning("File empty: %s", path)
+            return default
+        
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        logging.warning("Invalid JSON in file: %s", path)
+        return default
+    except Exception as e:
+        logging.error("Unexpected error reading %s: %s", path, e)
+        return default
 
 def validate_season(season: str, alternate: bool=False) -> bool:
     """

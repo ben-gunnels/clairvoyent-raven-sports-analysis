@@ -5,12 +5,14 @@ and store them in a list.
 from bs4 import BeautifulSoup as soup
 
 import pandas as pd
+from pathlib import Path
 import requests
 import time
+import json
 import os
 from dotenv import load_dotenv
 
-from utils import FuzzyNameSearcher, PFRScraper, normalize
+from utils import FuzzyNameSearcher, PFRScraper, normalize, safe_json_load
 from .data_dicts import PFR_DATA_DICT  
 
 load_dotenv()
@@ -25,6 +27,16 @@ class PFR: # Pro-Football Reference
         alphabet_capitalized = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         self.base_url = 'https://www.pro-football-reference.com'
         self.table_names = ["rushing_and_receiving", "kicking", "passing", "defense"]
+
+        # Check the cache to see if it exists
+        cache = os.getenv("PFR_DATA_CACHE")
+        self.cache_path = Path(cache) if cache else None
+
+        if self.cache_path and self.cache_path.exists():
+            print("Path exists:", self.cache_path)
+        else:
+            raise FileNotFoundError("Cache path does not exist or env var not set")
+
         self.scraper = PFRScraper(self.base_url, self.table_names)
 
         self.names = []
@@ -56,14 +68,6 @@ class PFR: # Pro-Football Reference
         # Allow links to be searchable by name
         self.player_dict = {name: link for name, link in zip(self.names, self.links)}  
 
-    def _search_link_from_name(self, name: str) -> str | None:
-        player, score = self.fuzzy.best_match(name)
-        if player is None:
-            print("No valid match found")
-            return None
-        print(self.player_dict.get(player, None)) # Return the link
-        return self.player_dict.get(player, None) # Return the link
-    
     def get_player_stats(self, name: str, year: str | int = None) -> pd.DataFrame:
         """
             Returns a dataframe of a player's seasonal stats by a requested season if passed.
@@ -72,13 +76,17 @@ class PFR: # Pro-Football Reference
                 IF BEING USED DURING ITERATION, ENFORCE RATE LIMITING TO AVOID BEING BLOCKED BY PFR'S SERVER.
                 IT IS RECOMMENDED TO WAIT 5 SECONDS BETWEEN QUERIES.
         """
-        player_link = self._search_link_from_name(name)
+        proper_name, player_link = self._search_proper_name_and_link_from_name(name)
 
-        if not player_link:
-            print("No matching player was found")
+        if not player_link or not proper_name:
+            print("No matching player was found") 
             return 
-                
-        player_stats = self.scraper.scrape_player_stats(self.base_url + player_link)
+        
+        player_stats = self._check_cache(proper_name)
+
+        if not player_stats:
+            player_stats = self.scraper.scrape_player_stats(self.base_url + player_link)
+            self._cache_results(proper_name, player_stats)
 
         if year is not None:
             if str(year) in player_stats.keys():
@@ -96,6 +104,47 @@ class PFR: # Pro-Football Reference
             stats_df.loc["year_id", year] = year
 
         return stats_df.T # Transpose the columns and rows
+
+    def _search_proper_name_and_link_from_name(self, name: str) -> str | None:
+        player, score = self.fuzzy.best_match(name)
+        if player is None:
+            print("No valid match found")
+            return None
+        
+        return player, self.player_dict.get(player, None) # Return the link
+    
+    def _cache_results(self, proper_name, data) -> bool:
+        if not self.cache_path:
+            raise FileNotFoundError("Cache path does not exist")
+
+        existing_data = safe_json_load(self.cache_path)
+
+        if not existing_data:
+            existing_data = {}
+
+        existing_data[proper_name] = data
+
+        # Write back to JSON file
+        try:
+            with open(self.cache_path, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Failed to write cache: {e}")
+            return False
+    
+    def _check_cache(self, name) -> dict:
+        if not self.cache_path:
+            return None
+        
+        data = safe_json_load(self.cache_path)
+
+        if not data:
+            return None
+        
+        player_stats = data.get(name, None)
+
+        return player_stats
 
 if __name__ == "__main__":
     alphabet_capitalized = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
