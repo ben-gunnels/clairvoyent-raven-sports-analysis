@@ -6,7 +6,9 @@ This section describes how to interact with the API for various sources of NFL d
 
 ## NFL Data Sources
 
-### Sports Data IO (Discovery Lab)
+---
+
+## Sports Data IO (Discovery Lab)
 
 **Description**
 
@@ -28,45 +30,47 @@ Provides live play-by-play data, seasonal statistics, and player feeds. Includes
 
 ### `SportsDataIO.core`
 
-| Method                       | Description                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------ |
-| `get_bye_weeks(season)`      | Get each team’s bye weeks for the specified season.                            |
-| `get_player_details(typeof)` | Retrieve details for players. `typeof` can be `"available"` or `"free-agent"`. |
-| `get_rookie_details(season)` | Get details for rookie players by season.                                      |
-| `get_standings(season)`      | Get league standings for a given season.                                       |
-| `get_teams()`                | Get details of all active teams.                                               |
-| `get_timeframes(typeof)`     | Get detailed information about past, present, and future timeframes.           |
+| Method                       | Returns        | Description                                                                    |
+| ---------------------------- | -------------- | ------------------------------------------------------------------------------ |
+| `get_bye_weeks(season)`      | `pd.DataFrame` | Get each team’s bye weeks for the specified season.                            |
+| `get_player_details(typeof)` | `pd.DataFrame` | Retrieve details for players. `typeof` can be `"available"` or `"free-agent"`. |
+| `get_rookie_details(season)` | `pd.DataFrame` | Get details for rookie players by season.                                      |
+| `get_standings(season)`      | `pd.DataFrame` | Get league standings for a given season.                                       |
+| `get_teams()`                | `pd.DataFrame` | Get details of all active teams.                                               |
+| `get_timeframes(typeof)`     | `pd.DataFrame` | Get detailed information about past, present, and future timeframes.           |
 
 ---
 
 ### `SportsDataIO.fantasy`
 
-| Method                                           | Description                                                      |
-| ------------------------------------------------ | ---------------------------------------------------------------- |
-| `get_dfs_slates_by_date(date)`                   | Get daily fantasy sports (DFS) slates for a specific date.       |
-| `get_dfs_slates_by_week(season, week)`           | Get DFS slates for a specific season and week.                   |
-| `get_defense_game_stats(season, week)`           | Get a team’s defensive game stats for the given season and week. |
-| `get_defense_season_stats(season)`               | Get a team’s defensive season stats.                             |
-| `get_player_game_stats(season, week)`            | Get individual player game stats for the given season and week.  |
-| `get_player_season_stats(season)`                | Get individual player season stats.                              |
-| `get_projected_defense_game_stats(season, week)` | Get projected defensive game stats for a team.                   |
-| `get_projected_defense_season_stats(season)`     | Get projected defensive season stats for a team.                 |
-| `get_projected_player_game_stats(season, week)`  | Get projected player game stats.                                 |
-| `get_projected_player_season_stats(season)`      | Get projected player season stats.                               |
+| Method                                           | Returns        | Description                                                      |
+| ------------------------------------------------ | -------------- | ---------------------------------------------------------------- |
+| `get_dfs_slates_by_date(date)`                   | `pd.DataFrame` | Get daily fantasy sports (DFS) slates for a specific date.       |
+| `get_dfs_slates_by_week(season, week)`           | `pd.DataFrame` | Get DFS slates for a specific season and week.                   |
+| `get_defense_game_stats(season, week)`           | `pd.DataFrame` | Get a team’s defensive game stats for the given season and week. |
+| `get_defense_season_stats(season)`               | `pd.DataFrame` | Get a team’s defensive season stats.                             |
+| `get_player_game_stats(season, week)`            | `pd.DataFrame` | Get individual player game stats for the given season and week.  |
+| `get_player_season_stats(season)`                | `pd.DataFrame` | Get individual player season stats.                              |
+| `get_projected_defense_game_stats(season, week)` | `pd.DataFrame` | Get projected defensive game stats for a team.                   |
+| `get_projected_defense_season_stats(season)`     | `pd.DataFrame` | Get projected defensive season stats for a team.                 |
+| `get_projected_player_game_stats(season, week)`  | `pd.DataFrame` | Get projected player game stats.                                 |
+| `get_projected_player_season_stats(season)`      | `pd.DataFrame` | Get projected player season stats.                               |
 
 ---
 
-### `SportsDataIO.Odds`
+### `SportsDataIO.odds`
 
-| Method                                    | Description                                              |
-| ----------------------------------------- | -------------------------------------------------------- |
-| `get_pregame_odds(season, week)`          | Get pregame betting odds for games in a season and week. |
-| `get_pregame_odds_line_movement(scoreid)` | Get betting line movement prior to a specific game.      |
-| `get_scores(season, week)`                | Get game scores for a season and week.                   |
-| `get_stadiums()`                          | Get information on current NFL stadiums.                 |
-| `get_team_game_stats(season, week)`       | Get team stats for a specific season and week.           |
-| `get_team_season_stats(season)`           | Get team stats for an entire season.                     |
+| Method                                    | Returns        | Description                                              |
+| ----------------------------------------- | -------------- | -------------------------------------------------------- |
+| `get_pregame_odds(season, week)`          | `pd.DataFrame` | Get pregame betting odds for games in a season and week. |
+| `get_pregame_odds_line_movement(scoreid)` | `pd.DataFrame` | Get betting line movement prior to a specific game.      |
+| `get_scores(season, week)`                | `pd.DataFrame` | Get game scores for a season and week.                   |
+| `get_stadiums()`                          | `pd.DataFrame` | Get information on current NFL stadiums.                 |
+| `get_team_game_stats(season, week)`       | `pd.DataFrame` | Get team stats for a specific season and week.           |
+| `get_team_season_stats(season)`           | `pd.DataFrame` | Get team stats for an entire season.                     |
 
+
+@TODO ADD EXAMPLE USAGE SECTION
 ---
 
 ### Notes
@@ -117,7 +121,7 @@ If tokens are valid or refreshable, the session works without further user inter
 
 ## API Namespaces & Methods
 
-### `Game`
+### `Yahoo.game`
 
 Wrapper around `yahoo_fantasy_api.game.Game`:
 
@@ -128,7 +132,7 @@ Wrapper around `yahoo_fantasy_api.game.Game`:
 
 ---
 
-### `League`
+### `Yahoo.league`
 
 Wrapper around `yahoo_fantasy_api.league.League`, returning `pandas.DataFrame` in many cases:
 
@@ -165,7 +169,7 @@ High-level facade that initializes the OAuth session, picks a league, and provid
 ## Example Usage
 
 ```python
-from src.data_api.Yahoo import Yahoo
+from data_api.Yahoo import Yahoo
 
 y = Yahoo()  # assumes YAHOO_OAUTH_KEYS_PATH is set properly
 
@@ -197,4 +201,65 @@ stat_cats = y.league.get_stat_categories()
 - **Missing `access_token` in JSON**: If the JSON lacks tokens after your first run, the OAuth flow likely failed. Re-run the authorization process so tokens are persisted.  
 - **Multiple leagues / selection logic**: The wrapper uses a default choice (last league ID). You may want to adjust logic to pick a specific league.
 
+## Pro Football Reference
+
+**Description**
+
+Provides seasonal data for passing, rushing and receiving, defense, and kicking. Scrapes active players from Pro Football Reference for their most relevant stats. 
+
+---
+### Prerequisite
+
+Before using the api, ensure that a data cache json file is set up in the repository. To do this, add pfr_data_cache.json as an empty file in the \data folder. In your environment variables, initialize PFR_DATA_CACHE to the full absolute path to this data cache. 
+
+---
+
+### Argument Conventions
+
+| Argument    | Type  | Description                                                                                                                  |
+| ----------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **name**    | `str` | Player name to be matched. Query will use fuzzy matching to return the best match.                   |
+| **season**  | `str  \| int` | In `"YYYY"` format. This will be used to query the available data for that specified season. |
+
+---
+
+## API Namespaces and Methods
+
+### `PFR`
+
+| Method                            | Returns   |    Description                                                                                   |
+| ----------------------------      | --------------- | ----------------------------------------------------------------------------------------------|
+| `get_player_stats(name, season)`  | `pd.DataFrame`  | Get a player's seasonal stats by name and optionally by season, otherwise return all seasons. |
+
+---
+
+## Example Usage
+
+```python
+from data_api.PFR import PFR
+
+pfr_api = PFR() 
+
+# Get the name for a player to query, names text should be sourced from Pro Football Reference
+with open(r"C:\Path\To\nfl_player_names.txt", "r") as f:
+  names = [line.strip() for line in f.readlines()]
+
+example_player = names[0]
+
+player_total_stats = pfr_api.get_player_stats(name=example_player)
+# Good
+player_2023_stats = pfr_api.get_player_stats(name=example_player, season=2023)
+# Also Good
+player_2023_stats = pfr_api.get_player_stats(name=example_player, season='2023')
+```
+
+---
+
+# Notes
+* This method involves web scraping pro-football-reference.com. The website allows modest scraping efforts but it is imperative when you call this API to self-regulate. According to Pro Football Reference, the server will block requests "more often than ten requests in a minute". source: https://www.sports-reference.com/bot-traffic.html
+* Hammering the server will result in a one day suspension from the website. Out of caution, in your functions limit calls using this endpoint to once every 7 seconds. 
+* The API is designed to cache results in the pfr_data_cache.json file when player data is scraped. For best use, scrape all the data you need programmatically and safely using the guidance above and then feel free to use the API without timing restrictions. 
+
+
+---
 
