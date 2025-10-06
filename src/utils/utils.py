@@ -96,7 +96,7 @@ def describe_endpoint(name, df):
     from io import StringIO
     s = StringIO()
     if type(df) is pd.DataFrame:
-        df.info(buf=s)
+        df.info(buf=s, verbose=True)
     else:
         buf.append(f"Type: {type(df)}")
         buf.append("Not a DataFrame.")

@@ -57,7 +57,19 @@ class PFRScraper:
         html = self._get_html(link)
         soup = self._soup_from_html(html)
         table, table_id = self._get_player_stats_table(soup)
-        header_fields = self._pick_header_fields(table, table_id)
+        header_fields = self._pick_season_header_fields(table, table_id)
+        return self._parse_body_rows(table, header_fields)
+    
+    def scrape_player_game_logs(self, link: str) -> Dict[str, Dict[str, str]]:
+        """
+        Fetch page, locate the game logs table, and parse game rows.
+        """
+        html = self._get_html(link)
+        soup = self._soup_from_html(html)
+
+        player_id = link.split("/")[-4] # E.g. https://pro-football-reference.com/players/A/AlleJo02/gamelog/2023/ i.d. is AlleJo02
+        table = self._get_player_game_logs_table(soup, player_id)
+        header_fields = self._pick_game_log_header_fields(table, player_id)
         return self._parse_body_rows(table, header_fields)
 
     # --- HTTP / HTML helpers -----------------------------------------------
@@ -86,10 +98,17 @@ class PFRScraper:
             raise ValueError("No matching stats table found on page.")
         table_id = table.get("id", "")
         return table, table_id
+    
+    def _get_player_game_logs_table(self, page_soup: BeautifulSoup, player_id: str) -> Tuple[BeautifulSoup, str]:
+        """Return the <table>."""
+        table = page_soup.find("table", id=player_id)
+        if not table:
+            raise ValueError("No matching game log table found on page.")
+        return table
 
     # --- Header handling ----------------------------------------------------
 
-    def _pick_header_fields(self, table: BeautifulSoup, table_id: str) -> list[str]:
+    def _pick_season_header_fields(self, table: BeautifulSoup, table_id: str) -> list[str]:
         """Choose which header row to use and return normalized field names."""
         rows = table.find_all("tr")
         if not rows:
@@ -99,6 +118,15 @@ class PFRScraper:
         # Use data-stat when available; fallback to text
         fields = [th.get("data-stat") or th.get_text(strip=True) for th in ths]
         return fields
+    
+    def _pick_game_log_header_fields(self, table: BeautifulSoup) -> list[str]:
+        rows = table.find_all("tr")
+        if not rows:
+            raise ValueError("Game log table has no rows.")
+        header_row = rows[1]
+        ths = header_row.find_all(["th", "td"])
+        fields = [th.get("data-stat") or th.get_text(strip=True) for th in ths]
+        return fields
 
     # --- Body parsing -------------------------------------------------------
 
@@ -106,13 +134,13 @@ class PFRScraper:
         """Parse <tbody> rows into {season: {field: value}}."""
         tbody = table.find("tbody") or table
         out: Dict[str, Dict[str, str]] = {}
-        for tr in self._iter_season_rows(tbody):
-            season_key, row_data = self._parse_row(tr, fields)
-            if season_key:
-                out[season_key] = row_data
+        for tr in self._iter_rows(tbody):
+            row_key, row_data = self._parse_row(tr, fields)
+            if row_key:
+                out[row_key] = row_data
         return out
 
-    def _iter_season_rows(self, tbody: BeautifulSoup) -> Iterable[BeautifulSoup]:
+    def _iter_rows(self, tbody: BeautifulSoup) -> Iterable[BeautifulSoup]:
         # Skip header/subtotal rows that sometimes appear in TBODY
         for tr in tbody.find_all("tr"):
             if tr.get("class") and "thead" in tr.get("class", []):
