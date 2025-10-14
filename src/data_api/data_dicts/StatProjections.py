@@ -14,7 +14,8 @@ The standard point system will follow for the following stat categories:
  * receptions: 0.5 points per receptions
  * passing_yards: 0.04 points per yard
  * passing_tds: 4 points per td completion
- * fumbles: -2 points per fumble
+ * rsh_fumbles: -2 points per fumble
+ * rc_fumbles: -2 points per fumble
  * interceptions: -2 points per interception
 
 The preferred usage for this object is to import it and mutate the 'projection' values while assigning an object to each player for
@@ -30,6 +31,7 @@ POSITION_PLAYER_STAT_PROJECTION_DATA_DICT = {
     "receptions": {"projection": 0.00, "weight": 0.5},
     "passing_yards": {"projection": 0.00, "weight": 0.04},
     "passing_tds": {"projection": 0.00, "weight": 4},
-    "fumbles": {"projection": 0.00, "weight": -2},
-    "interceptions": {"projection": 0.00, "weight": -2},
+    "rushing_fumbles_lost": {"projection": 0.00, "weight": -2},
+    "receiving_fumbles_lost": {"projection": 0.00, "weight": -2},
+    "passing_interceptions": {"projection": 0.00, "weight": -2},
 }
