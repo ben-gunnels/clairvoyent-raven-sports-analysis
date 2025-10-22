@@ -24,6 +24,11 @@ if project_root not in sys.path:
 # Now import internal modules
 import utils
 
+__all__ = [
+    "run_pipeline", 
+    "train_and_validate_model"
+]
+
 # -----------------------------------------------------------------------------
 # Constants / Config
 # -----------------------------------------------------------------------------
@@ -34,7 +39,7 @@ ROLLING_PERIOD = 4
 
 CATEGORIES_POSITIONS = {
     "passing": ["QB"],
-    "rushing_and_receiving": ["RB", "WR", "TE"],
+    "rushing_and_receiving": ["RB", "WR", "TE", "QB"],
     # (kicking not available)
 }
 
@@ -48,7 +53,7 @@ injuries_path = os.getenv("NFLVERSE_INJURIES_PATH")
 depth_path = os.getenv("NFLVERSE_DEPTH_CHART_PATH")
 
 all_players_df = pd.read_excel(rf"{player_stats_path}", engine="openpyxl")
-all_teams_df = pd.read_excel(rf"{teams_stats_path}", engine="openpyxl")
+all_teams_df = pd.read_csv(rf"{teams_stats_path}")
 injuries_df = pd.read_excel(rf"{injuries_path}", engine="openpyxl")
 depth_df = pd.read_excel(rf"{depth_path}", engine="openpyxl")
 print("-" * 40)
@@ -288,6 +293,8 @@ def train_and_validate_model(
 ):
     model_results: dict[str, dict] = {}
     models: dict[str, LinearRegression] = {}
+    predictions: dict[str, np.array] = {}
+    trues: dict[str, np.array] = {}
 
     for target, df in target_data_struct.items():
         if target == "def":
@@ -301,7 +308,7 @@ def train_and_validate_model(
 
         # Build a single feature matrix with aligned rows, then dropna once
         feature_cols = input_cols + def_input_cols
-        XY = df.loc[mask, feature_cols + [target_translation[target]]].dropna().reset_index(drop=True)
+        XY = df.loc[mask, feature_cols + [target_translation[target]]].fillna(0) #.dropna().reset_index(drop=True)
 
         if XY.empty:
             model_results[target] = {"validation_rmse": "nan", "r2": "nan"}
@@ -320,8 +327,81 @@ def train_and_validate_model(
 
         model_results[target] = {"validation_rmse": f"{rmse:.4f}", "r2": f"{r2:.3f}"}
         models[target] = reg
+        predictions[target] = preds
+        trues[target] = y_valid
 
-    return models, model_results
+    return models, model_results, trues, predictions
+
+
+def _restore_weights(
+        model_path: str
+) -> LinearRegression:
+    # --- later: restore ---
+    data = np.load(model_path, allow_pickle=True)
+    restored = LinearRegression()
+    restored.coef_ = data["coef"]
+    restored.intercept_ = data["intercept"]
+    restored.n_features_in_ = int(data["n_features_in_"])
+    # Optional but useful if you trained with a DataFrame and rely on column order:
+    fni = data["feature_names_in_"]
+    if fni is not None and fni.size > 0:
+        restored.feature_names_in_ = fni
+    return restored
+
+def _get_model_paths(
+        target_names: list,
+        linear_regression_weights_path: str
+):
+    model_paths = {}
+
+    for target_name in target_names:
+        model_paths[target_name] = os.path.join(linear_regression_weights_path, f"{target_name}_linreg_weights.npz")
+    return model_paths
+
+
+def test_model(
+    test_data_struct: dict[str, pd.DataFrame],
+    test_input_cols: dict[str, list[str]],
+    linear_regression_weights_path: str
+):
+    model_results: dict[str, dict] = {}
+    models: dict[str, LinearRegression] = {}
+    predictions: dict[str, dict] = {}
+    trues: dict[str, dict] = {}
+
+    model_paths = _get_model_paths(list(test_data_struct.keys()), linear_regression_weights_path)
+
+    for target, df in test_data_struct.items():
+        reg = _restore_weights(model_paths[target])
+        if target == "def":
+            continue  # no target variable for defense
+
+        input_cols = test_input_cols[target]
+        def_input_cols = test_input_cols["def"]
+
+        # Build a single feature matrix with aligned rows, then dropna once
+        feature_cols = input_cols + def_input_cols
+        XY = df.loc[:, feature_cols + [target_translation[target]]].fillna(0) #.dropna().reset_index(drop=True)
+
+        if XY.empty:
+            model_results[target] = {"validation_rmse": "nan", "r2": "nan"}
+            continue
+
+        X = XY[feature_cols].values
+        y = XY[target].values
+
+        preds = reg.predict(X)
+
+        rmse = root_mean_squared_error(y, preds)
+        r2 = r2_score(y, preds)
+
+        model_results[target] = {"validation_rmse": f"{rmse:.4f}", "r2": f"{r2:.3f}"}
+        models[target] = reg
+        trues[target] = y
+        predictions[target] = preds
+    
+    return model_results, trues, predictions
+
 
 def save_and_store_model_weights(models: dict, path: str = "models"):
     """Save the coefficients and intercept for the linear regression models to models/ folder."""
