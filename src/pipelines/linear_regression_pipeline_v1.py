@@ -23,10 +23,14 @@ if project_root not in sys.path:
 
 # Now import internal modules
 import utils
+from data_api import NFLDataPy
 
 __all__ = [
     "run_pipeline", 
-    "train_and_validate_model"
+    "train_and_validate_model",
+    "encode_and_filter_injuries_data",
+    "encode_depth_data",
+    "save_and_store_model_weights"
 ]
 
 # -----------------------------------------------------------------------------
@@ -47,15 +51,12 @@ CATEGORIES_POSITIONS = {
 # Load Persistent DataFrames
 # -----------------------------------------------------------------------------
 print("Loading base data frames...")
-player_stats_path = os.getenv("NFLVERSE_DATA_PATH")
-teams_stats_path = os.getenv("NFLVERSE_TEAMS_DATA_PATH")
-injuries_path = os.getenv("NFLVERSE_INJURIES_PATH")
-depth_path = os.getenv("NFLVERSE_DEPTH_CHART_PATH")
-
-all_players_df = pd.read_excel(rf"{player_stats_path}", engine="openpyxl")
-all_teams_df = pd.read_csv(rf"{teams_stats_path}")
-injuries_df = pd.read_excel(rf"{injuries_path}", engine="openpyxl")
-depth_df = pd.read_excel(rf"{depth_path}", engine="openpyxl")
+nfl_data = NFLDataPy()
+years = [2024]
+all_players_df = nfl_data.load_player_stats(years)
+injuries_df = nfl_data.load_injuries(years)
+depth_df = nfl_data.load_depth_charts(years)
+all_teams_df = nfl_data.load_team_stats(years)
 print("-" * 40)
 print("\n")
 
@@ -76,6 +77,18 @@ def encode_and_filter_injuries_data(injuries_df: pd.DataFrame = injuries_df):
 
     encoded_df = pd.DataFrame(encoded_data, columns=encoded_feature_names, index=filtered.index).fillna(0)
 
+    # Drop extraneous columns
+    keep_mask = np.isin(encoded_feature_names, utils.REQUIRED_INJURY_ENCODED_COLS)
+    encoded_feature_names = encoded_feature_names[keep_mask]
+
+    # Add missing encoded feature names that are required by the model
+    for col in utils.REQUIRED_INJURY_ENCODED_COLS:
+        if col not in encoded_feature_names:
+            encoded_df[col] = 0
+            encoded_feature_names = np.append(encoded_feature_names, col)
+    
+    encoded_df = encoded_df[encoded_feature_names]
+  
     out = pd.concat([filtered[["season", "week", "player_id"]], encoded_df], axis=1)
     return out, encoded_feature_names
 
@@ -202,7 +215,7 @@ def generate_target_dataframe_struct(
 ) -> dict[str, pd.DataFrame]:
     standard_inputs = [
         "season", "week", "player_id", "position",
-        "player_name", "team", "opponent_team", "depth_team",
+        "player_display_name", "team", "opponent_team", "depth_team",
     ]
     enc = list(encoded_feature_names)
 
@@ -355,7 +368,8 @@ def _get_model_paths(
     model_paths = {}
 
     for target_name in target_names:
-        model_paths[target_name] = os.path.join(linear_regression_weights_path, f"{target_name}_linreg_weights.npz")
+        if target_name != "def":
+            model_paths[target_name] = os.path.join(linear_regression_weights_path, f"{target_name}_linreg_weights.npz")
     return model_paths
 
 
@@ -364,6 +378,19 @@ def test_model(
     test_input_cols: dict[str, list[str]],
     linear_regression_weights_path: str
 ):
+    target_translation = {
+           "rsh_yd": "rushing_yards", 
+           "rsh_td": "rushing_tds", 
+           "rc_yd": "receiving_yards", 
+           "rc_td": "receiving_tds", 
+           "rc": "receptions", 
+           "p_yd": "passing_yards", 
+           "p_td": "passing_tds", 
+           "intcpt": "passing_interceptions", 
+           "rsh_fmbls": "rushing_fumbles_lost", 
+           "rc_fmbls": "receiving_fumbles_lost"
+    }
+
     model_results: dict[str, dict] = {}
     models: dict[str, LinearRegression] = {}
     predictions: dict[str, dict] = {}
@@ -372,23 +399,24 @@ def test_model(
     model_paths = _get_model_paths(list(test_data_struct.keys()), linear_regression_weights_path)
 
     for target, df in test_data_struct.items():
-        reg = _restore_weights(model_paths[target])
         if target == "def":
             continue  # no target variable for defense
+
+        reg = _restore_weights(model_paths[target])
 
         input_cols = test_input_cols[target]
         def_input_cols = test_input_cols["def"]
 
         # Build a single feature matrix with aligned rows, then dropna once
         feature_cols = input_cols + def_input_cols
-        XY = df.loc[:, feature_cols + [target_translation[target]]].fillna(0) #.dropna().reset_index(drop=True)
+        XY = df.loc[:, feature_cols + [target_translation[target]]].fillna(0)
 
         if XY.empty:
             model_results[target] = {"validation_rmse": "nan", "r2": "nan"}
             continue
 
         X = XY[feature_cols].values
-        y = XY[target].values
+        y = XY[target_translation[target]].values
 
         preds = reg.predict(X)
 

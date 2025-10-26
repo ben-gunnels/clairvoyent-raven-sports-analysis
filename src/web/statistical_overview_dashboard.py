@@ -1,0 +1,268 @@
+import os
+import sys
+import numpy as np
+import pandas as pd
+from functools import reduce
+from shiny import App, reactive, render, ui
+
+
+from dotenv import load_dotenv 
+load_dotenv()
+
+# -----------------------------------------------------------------------------
+# Project path setup
+# -----------------------------------------------------------------------------
+project_root = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+print(f"Project Root: {project_root}")
+print("Sys Path Before:", sys.path)
+if project_root not in sys.path:
+    print("Inserting project root to sys.path")
+    sys.path.insert(0, project_root)
+
+# Now import internal modules
+import utils
+from pipelines import linear_regression_pipeline_v1 as pipeline
+from data_api import NFLDataPy
+
+# -----------------------------------------------------------------------------
+# Constants / Config
+# -----------------------------------------------------------------------------
+COLUMN_CATEGORIES = utils.STATISTICAL_COLUMNS_BY_CATEGORY
+TARGET_INPUTS = utils.TARGETS_TO_INPUTS
+
+ROLLING_PERIOD = 4
+
+CATEGORIES_POSITIONS = {
+    "passing": ["QB"],
+    "rushing_and_receiving": ["RB", "WR", "TE", "QB"],
+    # (kicking not available)
+}
+
+SAVED_WEIGHTS_PATH = os.getenv("SAVED_WEIGHTS_PATH")
+COMBINED_DF_PATH = os.getenv("COMBINED_DATA_FRAME_PATH")
+
+# -----------------------------------------------------------------------------
+# Load Persistent DataFrames
+# -----------------------------------------------------------------------------
+df_cached = False
+
+if COMBINED_DF_PATH:
+    try:
+        combined_df = pd.read_csv(COMBINED_DF_PATH)
+        df_cached = True
+
+    except:
+        print("Dataframe is not cached or is not cached correctly, or the path is not set.")
+
+if not df_cached:
+    print("Loading base data frames...")
+    nfl_data = NFLDataPy()
+    years = [2024]
+    all_players_df = nfl_data.load_player_stats(years)
+    all_teams_df = nfl_data.load_team_stats(years)
+    injuries_df = nfl_data.load_injuries(years)
+    depth_df = nfl_data.load_depth_charts(years)
+    print("-" * 40)
+    print("\n")
+
+    print("Running data pipeline...")
+    target_data_struct, target_input_cols = pipeline.run_pipeline(all_players_df, all_teams_df, injuries_df, depth_df)
+    print("-" * 40)
+
+    results, trues, predictions = pipeline.test_model(target_data_struct, target_input_cols, )
+
+def assemble_combined_df(
+    target_data_struct: dict[str, pd.DataFrame],
+    trues: dict[str, pd.Series | pd.DataFrame],
+    predictions: dict[str, pd.Series | pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Build one wide table with per-target True/Projected columns.
+    - Merges on keys (prefers ['player_id','season','week'] if present, else just 'player_id')
+    - Keeps player_name and position (joined from a meta table)
+    - Fills NA in metric columns with 0 (does not touch text/meta)
+    """
+    # Collect metric frames (only keys + 2 metric columns per target)
+    metric_frames: list[pd.DataFrame] = []
+    # Collect meta (to attach player_name/position once at the end)
+    meta_frames: list[pd.DataFrame] = []
+
+    for target, df in target_data_struct.items():
+        if target == "def" or df is None or not isinstance(df, pd.DataFrame):
+            continue
+
+        # Determine merge keys available in this df
+        preferred_keys = ["player_id", "season", "week"]
+        keys = [k for k in preferred_keys if k in df.columns]
+        if not keys:  # Fallback to player_id only if absolutely necessary
+            if "player_id" in df.columns:
+                keys = ["player_id"]
+            else:
+                # Can't merge without an id; skip this target
+                print(f"[assemble] Skipping '{target}' (no merge key present).")
+                continue
+
+        # Build a small frame with keys and per-target metrics
+        tmp = df[keys].copy()
+
+        # Align trues/preds to df rows (works if Series indexed like df or just reindexes)
+        true_series = trues.get(target, pd.Series(index=df.index, dtype="float64"))
+        pred_series = predictions.get(target, pd.Series(index=df.index, dtype="float64"))
+
+        # If they are DataFrames with a single column, squeeze to Series
+        if isinstance(true_series, pd.DataFrame) and true_series.shape[1] == 1:
+            true_series = true_series.iloc[:, 0]
+        if isinstance(pred_series, pd.DataFrame) and pred_series.shape[1] == 1:
+            pred_series = pred_series.iloc[:, 0]
+
+        tmp[f"True {target}"] = pd.Series(true_series).reindex(df.index).to_numpy()
+        tmp[f"Projected {target}"] = pd.Series(pred_series).reindex(df.index).to_numpy()
+
+        metric_frames.append(tmp)
+
+        # Stash meta once per df (we’ll dedupe later)
+        keep_meta = [c for c in ["player_id", "season", "week", "player_display_name", "position"] if c in df.columns]
+        if keep_meta:
+            meta_frames.append(df[keep_meta].copy())
+
+    if not metric_frames:
+        return pd.DataFrame(columns=["player_id", "season", "week", "player_display_name", "position"])
+
+    # Merge all metric frames with an outer join on the available keys
+    def _merge(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        # Intersect on keys both frames share (at least player_id)
+        shared_keys = [k for k in ["player_id", "season", "week"] if k in left.columns and k in right.columns]
+        if not shared_keys and "player_id" in left.columns and "player_id" in right.columns:
+            shared_keys = ["player_id"]
+        return left.merge(right, on=shared_keys, how="outer")
+
+    combined_metrics = reduce(_merge, metric_frames)
+
+    # Build a meta table and join it on keys (prefer season/week if present)
+    if meta_frames:
+        meta = pd.concat(meta_frames, ignore_index=True).drop_duplicates()
+        # Keep only one row per key combo, preferring non-null player_name/position
+        key_order = [k for k in ["player_id", "season", "week"] if k in meta.columns]
+        if not key_order:
+            key_order = ["player_id"]
+        meta = (meta
+                .sort_values(key_order)  # stable
+                .groupby(key_order, as_index=False)
+                .agg({
+                    "player_display_name": "first" if "player_display_name" in meta.columns else "first",
+                    "position": "first" if "position" in meta.columns else "first"
+                })
+               ) if any(c in meta.columns for c in ["player_display_name", "position"]) else meta
+
+        # Determine merge keys between combined_metrics and meta
+        shared_keys = [k for k in ["player_id", "season", "week"] if k in combined_metrics.columns and k in meta.columns]
+        if not shared_keys and "player_id" in combined_metrics.columns and "player_id" in meta.columns:
+            shared_keys = ["player_id"]
+
+        combined = combined_metrics.merge(meta, on=shared_keys, how="left")
+    else:
+        combined = combined_metrics
+
+    # Fill NA only in metric columns (leave text/meta alone)
+    metric_cols = [c for c in combined.columns if c.startswith("True ") or c.startswith("Projected ")]
+    combined[metric_cols] = combined[metric_cols].fillna(0)
+
+    # Optional: order columns
+    front = [c for c in ["player_id", "season", "week", "player_display_name", "position"] if c in combined.columns]
+    rest = [c for c in combined.columns if c not in front]
+    combined = combined[front + rest]
+
+    combined = combined.drop_duplicates(subset=["season", "week", "player_display_name"])
+
+    return combined
+
+if not df_cached:
+    combined_df = assemble_combined_df(target_data_struct, trues, predictions)
+
+# -------------------------------------------------------------------
+# UI
+# -------------------------------------------------------------------
+app_ui = ui.page_fluid(
+    ui.h2("2024 NFL Weekly Player Stats with Projections"),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.input_selectize(
+                "week_filter",
+                "Select week(s)",
+                choices=sorted(combined_df["week"].unique().tolist()),
+                multiple=True,
+            ),
+            ui.input_selectize(
+                "position_filter",
+                "Select position(s)",
+                choices=sorted(combined_df["position"].unique().tolist()),
+                multiple=True,
+            ),
+            ui.input_numeric("min_rsh_yards", "Minimum rushing yards", 0),
+            ui.input_numeric("min_rc_yards", "Minimum receiving yards", 0),
+            ui.input_numeric("min_p_yards", "Minimum passing yards", 0),
+            ui.input_select(
+                "sort_by",
+                "Sort by column",
+                choices=["True rsh_yd", "Projected rsh_yd", "True rc_yd", "Projected rc_yd", "True p_yd", "Projected p_yd"],
+                selected="True rsh_yd"
+            ),
+            ui.input_radio_buttons(
+                "sort_order",
+                "Sort order",
+                choices=["Descending", "Ascending"],
+                selected="Descending"
+            ),
+        ),
+        ui.output_data_frame("filtered_table")
+    )
+)
+
+# -------------------------------------------------------------------
+# Server
+# -------------------------------------------------------------------
+def server(input, output, session):
+    @reactive.calc
+    def filtered_data():
+        d = combined_df.copy()
+
+        # Round to 2 decimals
+        d = d.round(2)
+
+        # Filter by week(s)
+        if input.week_filter():
+            d = d[d["week"].isin(input.week_filter())]
+
+        if input.position_filter():
+            d = d[d["position"].isin(input.position_filter())]
+
+        # Filter by yardage
+        d = d[d["True rsh_yd"] >= input.min_rsh_yards()]
+        d = d[d["True rc_yd"] >= input.min_rc_yards()]
+        d = d[d["True p_yd"] >= input.min_p_yards()]
+
+        # Sort (guard in case column is missing)
+        sort_col = input.sort_by()
+        if sort_col not in d.columns:
+            # fallback to the first available choice or no-op
+            possible = [c for c in ["True rsh_yd", "Projected rsh_yd"] if c in d.columns]
+            if possible:
+                sort_col = possible[0]
+        ascending = input.sort_order() == "Ascending"
+        if sort_col in d.columns:
+            d = d.sort_values(by=sort_col, ascending=ascending)
+
+        return d.reset_index(drop=True)
+
+    @output
+    @render.data_frame
+    def filtered_table():
+        return render.DataGrid(
+            filtered_data(),
+            filters=True,   # column filters
+        )
+
+# -------------------------------------------------------------------
+# App entrypoint
+# -------------------------------------------------------------------
+app = App(app_ui, server)

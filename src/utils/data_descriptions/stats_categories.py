@@ -2,6 +2,7 @@ STATISTICAL_COLUMNS_BY_CATEGORY = {
     "standard": {
         "player_id",
         "player_name",
+        "player_display_name",
         "position",
         "position_group",
         "season",
@@ -9,19 +10,17 @@ STATISTICAL_COLUMNS_BY_CATEGORY = {
         "season_type",
         "team",
         "opponent_team",
-        "report_status_Doubtful",
-        "report_status_Note",
-        "report_status_Out",
-        "report_status_Probable",
-        "report_status_Questionable",
-        "report_status_nan",
-        "practice_status_\n    ",
-        "practice_status_Did Not Participate In Practice",
-        "practice_status_Full Participation in Practice",
-        "practice_status_Limited Participation in Practice",
-        "practice_status_Note",
-        "practice_status_Out (Definitely Will Not Play)",
-        "depth_team", 
+        "depth_team",
+        'report_status_Doubtful',
+        'report_status_Out', 
+        'report_status_Questionable',
+        'report_status_Probable',
+        'report_status_None', 
+        'practice_status_\n    ',
+        'practice_status_Did Not Participate In Practice',
+        'practice_status_Full Participation in Practice',
+        'practice_status_Limited Participation in Practice',
+        'practice_status_Out (Definitely Will Not Play)'
     },
     "passing": {
         "completions",
@@ -161,17 +160,17 @@ TARGETS_TO_INPUTS = {
     "rsh_yd": [
         "rushing_yards", "rushing_tds", "rushing_fumbles_lost", "rushing_fumbles",
         "rushing_first_downs", "rushing_2pt_conversions", "racr", "rushing_epa",
-        "carries", "pacr"
+        "carries"
     ],
     "rsh_td": [
         "rushing_yards", "rushing_tds", "rushing_fumbles_lost", "rushing_fumbles",
         "rushing_first_downs", "rushing_2pt_conversions", "racr", "rushing_epa",
-        "carries", "pacr"
+        "carries"
     ],
     "rsh_fmbls": [
         "rushing_yards", "rushing_tds", "rushing_fumbles_lost", "rushing_fumbles",
         "rushing_first_downs", "rushing_2pt_conversions", "racr", "rushing_epa",
-        "carries", "pacr"
+        "carries"
     ],
 
     # --------------------
@@ -181,29 +180,25 @@ TARGETS_TO_INPUTS = {
         "receiving_yards", "receiving_tds", "receiving_fumbles_lost", "receptions",
         "receiving_first_downs", "receiving_yards_after_catch", "receiving_air_yards",
         "receiving_2pt_conversions", "receiving_epa",
-        "targets", "target_share", "wopr", "air_yards_share",
-        "pacr", "racr"
+        "targets", "target_share", "wopr", "air_yards_share", "racr"
     ],
     "rc_td": [
         "receiving_yards", "receiving_tds", "receiving_fumbles_lost", "receptions",
         "receiving_first_downs", "receiving_yards_after_catch", "receiving_air_yards",
         "receiving_2pt_conversions", "receiving_epa",
-        "targets", "target_share", "wopr", "air_yards_share",
-        "pacr", "racr"
+        "targets", "target_share", "wopr", "air_yards_share", "racr"
     ],
     "rc": [
         "receiving_yards", "receiving_tds", "receiving_fumbles_lost", "receptions",
         "receiving_first_downs", "receiving_yards_after_catch", "receiving_air_yards",
         "receiving_2pt_conversions", "receiving_epa",
-        "targets", "target_share", "wopr", "air_yards_share",
-        "pacr", "racr"
+        "targets", "target_share", "wopr", "air_yards_share", "racr"
     ],
     "rc_fmbls": [
         "receiving_yards", "receiving_tds", "receiving_fumbles_lost", "receptions",
         "receiving_first_downs", "receiving_yards_after_catch", "receiving_air_yards",
         "receiving_2pt_conversions", "receiving_epa",
-        "targets", "target_share", "wopr", "air_yards_share",
-        "pacr", "racr"
+        "targets", "target_share", "wopr", "air_yards_share", "racr"
     ],
 
     # --------------------
@@ -214,24 +209,21 @@ TARGETS_TO_INPUTS = {
         "passing_air_yards", "passing_yards_after_catch", "passing_epa",
         "passing_cpoe", "passing_2pt_conversions",
         "completions", "attempts",
-        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
-        "pacr"
+        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost"
     ],
     "p_td": [
         "passing_yards", "passing_tds", "passing_interceptions", "passing_first_downs",
         "passing_air_yards", "passing_yards_after_catch", "passing_epa",
         "passing_cpoe", "passing_2pt_conversions",
         "completions", "attempts",
-        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
-        "pacr"
+        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost"
     ],
     "intcpt": [
         "passing_yards", "passing_tds", "passing_interceptions", "passing_first_downs",
         "passing_air_yards", "passing_yards_after_catch", "passing_epa",
         "passing_cpoe", "passing_2pt_conversions",
         "completions", "attempts",
-        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
-        "pacr"
+        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost"
     ],
 
     # --------------------
@@ -247,3 +239,16 @@ TARGETS_TO_INPUTS = {
         "def_safeties", "def_tds"
     ]
 }
+
+REQUIRED_INJURY_ENCODED_COLS = [
+        'report_status_Doubtful',
+        'report_status_Out', 
+        'report_status_Questionable',
+        'report_status_Probable',
+        'report_status_None', 
+        'practice_status_\n    ',
+        'practice_status_Did Not Participate In Practice',
+        'practice_status_Full Participation in Practice',
+        'practice_status_Limited Participation in Practice',
+        'practice_status_Out (Definitely Will Not Play)'
+]
