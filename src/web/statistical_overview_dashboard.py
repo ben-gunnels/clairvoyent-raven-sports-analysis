@@ -42,34 +42,8 @@ SAVED_WEIGHTS_PATH = os.getenv("SAVED_WEIGHTS_PATH")
 COMBINED_DF_PATH = os.getenv("COMBINED_DATA_FRAME_PATH")
 
 # -----------------------------------------------------------------------------
-# Load Persistent DataFrames
+# Define functions
 # -----------------------------------------------------------------------------
-df_cached = False
-
-if COMBINED_DF_PATH:
-    try:
-        combined_df = pd.read_csv(COMBINED_DF_PATH)
-        df_cached = True
-
-    except:
-        print("Dataframe is not cached or is not cached correctly, or the path is not set.")
-
-if not df_cached:
-    print("Loading base data frames...")
-    nfl_data = NFLDataPy()
-    years = [2024]
-    all_players_df = nfl_data.load_player_stats(years)
-    all_teams_df = nfl_data.load_team_stats(years)
-    injuries_df = nfl_data.load_injuries(years)
-    depth_df = nfl_data.load_depth_charts(years)
-    print("-" * 40)
-    print("\n")
-
-    print("Running data pipeline...")
-    target_data_struct, target_input_cols = pipeline.run_pipeline(all_players_df, all_teams_df, injuries_df, depth_df)
-    print("-" * 40)
-
-    results, trues, predictions = pipeline.test_model(target_data_struct, target_input_cols, )
 
 def assemble_combined_df(
     target_data_struct: dict[str, pd.DataFrame],
@@ -115,8 +89,10 @@ def assemble_combined_df(
         if isinstance(pred_series, pd.DataFrame) and pred_series.shape[1] == 1:
             pred_series = pred_series.iloc[:, 0]
 
-        tmp[f"True {target}"] = pd.Series(true_series).reindex(df.index).to_numpy()
-        tmp[f"Projected {target}"] = pd.Series(pred_series).reindex(df.index).to_numpy()
+        tmp[f"True {utils.TARGET_TRANSLATION[target]}"] = pd.Series(true_series).reindex(df.index).to_numpy()
+        tmp[f"Projected {utils.TARGET_TRANSLATION[target]}"] = pd.Series(pred_series).reindex(df.index).to_numpy()
+        tmp[f"Average {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"]
+        tmp[f"STD {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"]
 
         metric_frames.append(tmp)
 
@@ -164,7 +140,10 @@ def assemble_combined_df(
         combined = combined_metrics
 
     # Fill NA only in metric columns (leave text/meta alone)
-    metric_cols = [c for c in combined.columns if c.startswith("True ") or c.startswith("Projected ")]
+    def _metric_conditions(column: str):
+        return column.startswith("True ") or column.startswith("Projected ") or column.startswith("Average ") or column.startswith("STD ")
+    
+    metric_cols = [c for c in combined.columns if _metric_conditions(c)]
     combined[metric_cols] = combined[metric_cols].fillna(0)
 
     # Optional: order columns
@@ -176,8 +155,38 @@ def assemble_combined_df(
 
     return combined
 
+# -----------------------------------------------------------------------------
+# Load Persistent DataFrames
+# -----------------------------------------------------------------------------
+df_cached = False
+
+if COMBINED_DF_PATH:
+    try:
+        combined_df = pd.read_csv(COMBINED_DF_PATH)
+        df_cached = True
+
+    except:
+        print("Dataframe is not cached or is not cached correctly, or the path is not set.")
+
 if not df_cached:
+    print("Loading base data frames...")
+    nfl_data = NFLDataPy()
+    years = [2024]
+    all_players_df = nfl_data.load_player_stats(years)
+    all_teams_df = nfl_data.load_team_stats(years)
+    injuries_df = nfl_data.load_injuries(years)
+    depth_df = nfl_data.load_depth_charts(years)
+    print("-" * 40)
+    print("\n")
+
+    print("Running data pipeline...")
+    target_data_struct, target_input_cols = pipeline.run_pipeline(all_players_df, all_teams_df, injuries_df, depth_df)
+    print("-" * 40)
+
+    results, trues, predictions = pipeline.test_model(target_data_struct, target_input_cols, SAVED_WEIGHTS_PATH)
+
     combined_df = assemble_combined_df(target_data_struct, trues, predictions)
+    combined_df.to_csv("combined_data_frame.csv")
 
 # -------------------------------------------------------------------
 # UI
@@ -204,8 +213,8 @@ app_ui = ui.page_fluid(
             ui.input_select(
                 "sort_by",
                 "Sort by column",
-                choices=["True rsh_yd", "Projected rsh_yd", "True rc_yd", "Projected rc_yd", "True p_yd", "Projected p_yd"],
-                selected="True rsh_yd"
+                choices=["True rushing_yards", "Projected rushing_yards", "True receiving_yards", "Projected receiving_yards", "True passing_yards", "Projected passing_yards"],
+                selected="True rushing_yards"
             ),
             ui.input_radio_buttons(
                 "sort_order",
@@ -231,21 +240,21 @@ def server(input, output, session):
 
         # Filter by week(s)
         if input.week_filter():
-            d = d[d["week"].isin(input.week_filter())]
+            d = d[d["week"].isin([int(wk) for wk in input.week_filter()])]
 
         if input.position_filter():
             d = d[d["position"].isin(input.position_filter())]
 
         # Filter by yardage
-        d = d[d["True rsh_yd"] >= input.min_rsh_yards()]
-        d = d[d["True rc_yd"] >= input.min_rc_yards()]
-        d = d[d["True p_yd"] >= input.min_p_yards()]
+        d = d[d["True rushing_yards"] >= input.min_rsh_yards()]
+        d = d[d["True receiving_yards"] >= input.min_rc_yards()]
+        d = d[d["True passing_yards"] >= input.min_p_yards()]
 
         # Sort (guard in case column is missing)
         sort_col = input.sort_by()
         if sort_col not in d.columns:
             # fallback to the first available choice or no-op
-            possible = [c for c in ["True rsh_yd", "Projected rsh_yd"] if c in d.columns]
+            possible = [c for c in ["True rushing_yards", "Projected rushing_yards"] if c in d.columns]
             if possible:
                 sort_col = possible[0]
         ascending = input.sort_order() == "Ascending"

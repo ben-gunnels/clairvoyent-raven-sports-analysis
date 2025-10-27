@@ -192,6 +192,8 @@ def scale_inplace(df: pd.DataFrame, cols: list[str], name: str, scalers: dict | 
     if scalers is None:
         scalers = {}
     scaler = StandardScaler()
+    for col in cols:
+        df[f"{col}_copy"] = df[col] # Save a preserved column
     df.loc[:, cols] = scaler.fit_transform(df[cols])
     scalers[name] = scaler
     return df, scalers
@@ -286,19 +288,6 @@ def merge_target_data_to_defense(target_data_struct: dict[str, pd.DataFrame]) ->
     return target_data_struct
 
 
-target_translation = {
-           "rsh_yd": "rushing_yards", 
-           "rsh_td": "rushing_tds", 
-           "rc_yd": "receiving_yards", 
-           "rc_td": "receiving_tds", 
-           "rc": "receptions", 
-           "p_yd": "passing_yards", 
-           "p_td": "passing_tds", 
-           "intcpt": "passing_interceptions", 
-           "rsh_fmbls": "rushing_fumbles_lost", 
-           "rc_fmbls": "receiving_fumbles_lost"
-}
-
 def train_and_validate_model(
     target_data_struct: dict[str, pd.DataFrame],
     target_input_cols: dict[str, list[str]],
@@ -321,14 +310,14 @@ def train_and_validate_model(
 
         # Build a single feature matrix with aligned rows, then dropna once
         feature_cols = input_cols + def_input_cols
-        XY = df.loc[mask, feature_cols + [target_translation[target]]].fillna(0) #.dropna().reset_index(drop=True)
+        XY = df.loc[mask, feature_cols + [utils.TARGET_TRANSLATION[target]]].fillna(0) #.dropna().reset_index(drop=True)
 
         if XY.empty:
             model_results[target] = {"validation_rmse": "nan", "r2": "nan"}
             continue
 
         X = XY[feature_cols].values
-        y = XY[target_translation[target]].values
+        y = XY[utils.TARGET_TRANSLATION[target]].values
 
         X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -378,19 +367,6 @@ def test_model(
     test_input_cols: dict[str, list[str]],
     linear_regression_weights_path: str
 ):
-    target_translation = {
-           "rsh_yd": "rushing_yards", 
-           "rsh_td": "rushing_tds", 
-           "rc_yd": "receiving_yards", 
-           "rc_td": "receiving_tds", 
-           "rc": "receptions", 
-           "p_yd": "passing_yards", 
-           "p_td": "passing_tds", 
-           "intcpt": "passing_interceptions", 
-           "rsh_fmbls": "rushing_fumbles_lost", 
-           "rc_fmbls": "receiving_fumbles_lost"
-    }
-
     model_results: dict[str, dict] = {}
     models: dict[str, LinearRegression] = {}
     predictions: dict[str, dict] = {}
@@ -409,14 +385,14 @@ def test_model(
 
         # Build a single feature matrix with aligned rows, then dropna once
         feature_cols = input_cols + def_input_cols
-        XY = df.loc[:, feature_cols + [target_translation[target]]].fillna(0)
+        XY = df.loc[:, feature_cols + [utils.TARGET_TRANSLATION[target]]].fillna(0)
 
         if XY.empty:
             model_results[target] = {"validation_rmse": "nan", "r2": "nan"}
             continue
 
         X = XY[feature_cols].values
-        y = XY[target_translation[target]].values
+        y = XY[utils.TARGET_TRANSLATION[target]].values
 
         preds = reg.predict(X)
 

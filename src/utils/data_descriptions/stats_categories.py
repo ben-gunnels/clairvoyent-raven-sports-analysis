@@ -252,3 +252,16 @@ REQUIRED_INJURY_ENCODED_COLS = [
         'practice_status_Limited Participation in Practice',
         'practice_status_Out (Definitely Will Not Play)'
 ]
+
+TARGET_TRANSLATION = {
+           "rsh_yd": "rushing_yards", 
+           "rsh_td": "rushing_tds", 
+           "rc_yd": "receiving_yards", 
+           "rc_td": "receiving_tds", 
+           "rc": "receptions", 
+           "p_yd": "passing_yards", 
+           "p_td": "passing_tds", 
+           "intcpt": "passing_interceptions", 
+           "rsh_fmbls": "rushing_fumbles_lost", 
+           "rc_fmbls": "receiving_fumbles_lost"
+}
