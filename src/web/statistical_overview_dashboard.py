@@ -1,9 +1,11 @@
 import os
 import sys
+import matplotlib
 import numpy as np
 import pandas as pd
 from functools import reduce
 from shiny import App, reactive, render, ui
+
 
 
 from dotenv import load_dotenv 
@@ -153,7 +155,7 @@ def assemble_combined_df(
 
     combined = combined.drop_duplicates(subset=["season", "week", "player_display_name"])
 
-    return combined
+    return combined.reset_index(drop=True)
 
 # -----------------------------------------------------------------------------
 # Load Persistent DataFrames
@@ -223,7 +225,14 @@ app_ui = ui.page_fluid(
                 selected="Descending"
             ),
         ),
-        ui.output_data_frame("filtered_table")
+        ui.card(
+            ui.card_header("Colorized (by z-score)"),
+            ui.output_ui("styled_table"),
+        ),
+        # ui.card(
+        #     ui.card_header("Raw grid"),
+        #     ui.output_data_frame("filtered_table"),
+        # ),
     )
 )
 
@@ -233,43 +242,70 @@ app_ui = ui.page_fluid(
 def server(input, output, session):
     @reactive.calc
     def filtered_data():
-        d = combined_df.copy()
+        MAX_ROWS = 300
+        d = combined_df.copy().round(2)
+        d = d.head(MAX_ROWS)
 
-        # Round to 2 decimals
-        d = d.round(2)
-
-        # Filter by week(s)
         if input.week_filter():
             d = d[d["week"].isin([int(wk) for wk in input.week_filter()])]
-
         if input.position_filter():
             d = d[d["position"].isin(input.position_filter())]
 
-        # Filter by yardage
-        d = d[d["True rushing_yards"] >= input.min_rsh_yards()]
+        d = d[d["True rushing_yards"]   >= input.min_rsh_yards()]
         d = d[d["True receiving_yards"] >= input.min_rc_yards()]
-        d = d[d["True passing_yards"] >= input.min_p_yards()]
+        d = d[d["True passing_yards"]   >= input.min_p_yards()]
 
-        # Sort (guard in case column is missing)
         sort_col = input.sort_by()
         if sort_col not in d.columns:
-            # fallback to the first available choice or no-op
-            possible = [c for c in ["True rushing_yards", "Projected rushing_yards"] if c in d.columns]
-            if possible:
-                sort_col = possible[0]
-        ascending = input.sort_order() == "Ascending"
-        if sort_col in d.columns:
-            d = d.sort_values(by=sort_col, ascending=ascending)
-
+            for c in ["True rushing_yards", "Projected rushing_yards"]:
+                if c in d.columns: sort_col = c; break
+        d = d.sort_values(by=sort_col, ascending=(input.sort_order()=="Ascending"))
         return d.reset_index(drop=True)
 
+    # helper: returns a list of "background-color: #hex" per cell in the column
+    def _bg_from_z(zvals: pd.Series) -> list[str]:
+        vmax = np.nanmax(np.abs(zvals.values)) if len(zvals) else 1.0
+        if not np.isfinite(vmax) or vmax == 0:
+            vmax = 1.0
+        norm = (zvals.values + vmax) / (2 * vmax)          # [-vmax, vmax] -> [0, 1]
+        cmap = matplotlib.cm.get_cmap("RdYlGn")
+        colors = [matplotlib.colors.to_hex(cmap(float(x))) if np.isfinite(x) else "#ffffff" for x in norm]
+        return [f"background-color: {c}" for c in colors]
+
+    @output
+    @render.ui
+    def styled_table():
+        d = filtered_data()
+
+        z_suffix = "_z-score"
+        z_cols   = [c for c in d.columns if c.endswith(z_suffix)]
+        base_cols = [c[:-len(z_suffix)] for c in z_cols if c[:-len(z_suffix)] in d.columns]
+
+        # we will show the table WITHOUT z-score columns
+        d_no_z = d.drop(columns=z_cols, errors="ignore")
+
+        sty = d_no_z.style.hide(axis="index")
+
+        # apply PER-COLUMN styles from its z-score series (aligned by index)
+        def color_by_z(series: pd.Series, z: pd.Series) -> list[str]:
+            return _bg_from_z(z.reindex(series.index))
+
+        for base in base_cols:
+            zcol = f"{base}{z_suffix}"
+            if zcol not in d.columns:
+                continue
+            z = d.loc[d_no_z.index, zcol]             # align to the displayed rows
+            # IMPORTANT: axis=0 (column-wise) and a proper subset to avoid row broadcast
+            sty = sty.apply(color_by_z, axis=0, subset=pd.IndexSlice[:, [base]], z=z)
+
+        sty = sty.format(precision=2)
+        return ui.HTML(sty.to_html())
+
+    # keep your raw grid too if you want
     @output
     @render.data_frame
     def filtered_table():
-        return render.DataGrid(
-            filtered_data(),
-            filters=True,   # column filters
-        )
+        return render.DataGrid(filtered_data(), filters=True)
 
 # -------------------------------------------------------------------
 # App entrypoint
