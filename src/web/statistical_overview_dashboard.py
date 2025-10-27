@@ -242,9 +242,7 @@ app_ui = ui.page_fluid(
 def server(input, output, session):
     @reactive.calc
     def filtered_data():
-        MAX_ROWS = 300
         d = combined_df.copy().round(2)
-        d = d.head(MAX_ROWS)
 
         if input.week_filter():
             d = d[d["week"].isin([int(wk) for wk in input.week_filter()])]
