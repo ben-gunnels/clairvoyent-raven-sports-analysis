@@ -273,6 +273,12 @@ def server(input, output, session):
     @output
     @render.ui
     def styled_table():
+        if not input.week_filter():
+            return 
+        
+        if not input.position_filter():
+            return
+        
         d = filtered_data()
 
         z_suffix = "_z-score"
