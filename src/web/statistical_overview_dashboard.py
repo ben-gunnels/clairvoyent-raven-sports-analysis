@@ -95,6 +95,7 @@ def assemble_combined_df(
         tmp[f"Projected {utils.TARGET_TRANSLATION[target]}"] = pd.Series(pred_series).reindex(df.index).to_numpy()
         tmp[f"Average {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"]
         tmp[f"STD {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"]
+        tmp[f"Risk Quotient {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"] / df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"]
 
         metric_frames.append(tmp)
 
@@ -143,7 +144,11 @@ def assemble_combined_df(
 
     # Fill NA only in metric columns (leave text/meta alone)
     def _metric_conditions(column: str):
-        return column.startswith("True ") or column.startswith("Projected ") or column.startswith("Average ") or column.startswith("STD ")
+        return (column.startswith("True ") or 
+                column.startswith("Projected ") or 
+                column.startswith("Average ") or 
+                column.startswith("STD ") or
+                column.startswith("Risk Quotient "))
     
     metric_cols = [c for c in combined.columns if _metric_conditions(c)]
     combined[metric_cols] = combined[metric_cols].fillna(0)
@@ -188,13 +193,50 @@ if not df_cached:
     results, trues, predictions = pipeline.test_model(target_data_struct, target_input_cols, SAVED_WEIGHTS_PATH)
 
     combined_df = assemble_combined_df(target_data_struct, trues, predictions)
+
+    from collections import defaultdict
+    targets = [f"{prefix} {target}" for target in utils.TARGET_TRANSLATION.values() for prefix in ["True", "Projected", "Average", "STD", "Risk Quotient"]]
+    descriptive_stats = defaultdict(dict)
+
+    for col in targets:
+        descriptive_stats[col]["mean"] = combined_df.groupby("position")[col].mean()
+        descriptive_stats[col]["std"] = combined_df.groupby("position")[col].std()
+
+
+    for col in targets:
+        means = descriptive_stats[col]["mean"]                     # Series indexed by position
+        stds  = descriptive_stats[col]["std"].replace(0, np.nan)   # avoid div-by-0
+
+        mu  = combined_df["position"].map(means)
+        sig = combined_df["position"].map(stds)
+
+        z = (combined_df[col] - mu) / sig
+        combined_df[f"{col}_z-score"] = z.fillna(0)                # fill NA/inf with 0 if you like
+
     combined_df.to_csv("combined_data_frame.csv")
 
 # -------------------------------------------------------------------
 # UI
 # -------------------------------------------------------------------
+
+sort_by_columns = [
+    "True rushing_yards", 
+    "Projected rushing_yards", 
+    "Average rushing_yards",
+    "Risk Quotient rushing_yards",
+    "True receiving_yards", 
+    "Projected receiving_yards", 
+    "Average receiving_yards", 
+    "Risk Quotient receiving_yards", 
+    "True passing_yards", 
+    "Projected passing_yards",
+    "Average passing_yards",
+    "Risk Quotient passing_yards"
+]
+
 app_ui = ui.page_fluid(
     ui.h2("2024 NFL Weekly Player Stats with Projections"),
+    ui.p("Select week and position categories to see data from the 2024 NFL Season."),
     ui.layout_sidebar(
         ui.sidebar(
             ui.input_selectize(
@@ -209,20 +251,24 @@ app_ui = ui.page_fluid(
                 choices=sorted(combined_df["position"].unique().tolist()),
                 multiple=True,
             ),
-            ui.input_numeric("min_rsh_yards", "Minimum rushing yards", 0),
-            ui.input_numeric("min_rc_yards", "Minimum receiving yards", 0),
-            ui.input_numeric("min_p_yards", "Minimum passing yards", 0),
             ui.input_select(
                 "sort_by",
                 "Sort by column",
-                choices=["True rushing_yards", "Projected rushing_yards", "True receiving_yards", "Projected receiving_yards", "True passing_yards", "Projected passing_yards"],
-                selected="True rushing_yards"
+                choices=sort_by_columns,
             ),
             ui.input_radio_buttons(
                 "sort_order",
                 "Sort order",
                 choices=["Descending", "Ascending"],
                 selected="Descending"
+            ),
+            ui.h3("Select Columns to Display"),
+            ui.input_selectize(
+                "column_select",
+                "Columns to display",
+                choices=sorted([c for c in combined_df.columns if not c.endswith("_z-score")]),
+                multiple=True,
+                selected=["True rushing_yards", "Projected rushing_yards"]
             ),
         ),
         ui.card(
@@ -249,23 +295,26 @@ def server(input, output, session):
         if input.position_filter():
             d = d[d["position"].isin(input.position_filter())]
 
-        d = d[d["True rushing_yards"]   >= input.min_rsh_yards()]
-        d = d[d["True receiving_yards"] >= input.min_rc_yards()]
-        d = d[d["True passing_yards"]   >= input.min_p_yards()]
-
         sort_col = input.sort_by()
         if sort_col not in d.columns:
             for c in ["True rushing_yards", "Projected rushing_yards"]:
                 if c in d.columns: sort_col = c; break
-        d = d.sort_values(by=sort_col, ascending=(input.sort_order()=="Ascending"))
+        if sort_col:
+            d = d.sort_values(by=sort_col, ascending=(input.sort_order()=="Ascending"))
         return d.reset_index(drop=True)
 
     # helper: returns a list of "background-color: #hex" per cell in the column
     def _bg_from_z(zvals: pd.Series) -> list[str]:
+        s_name = zvals.name
+
+        sign = 1
+        if "STD" in s_name or "Risk Quotient" in s_name:
+            sign = -1
+
         vmax = np.nanmax(np.abs(zvals.values)) if len(zvals) else 1.0
         if not np.isfinite(vmax) or vmax == 0:
             vmax = 1.0
-        norm = (zvals.values + vmax) / (2 * vmax)          # [-vmax, vmax] -> [0, 1]
+        norm = ((zvals.values * sign) + vmax) / (2 * vmax)          # [-vmax, vmax] -> [0, 1]
         cmap = matplotlib.cm.get_cmap("RdYlGn")
         colors = [matplotlib.colors.to_hex(cmap(float(x))) if np.isfinite(x) else "#ffffff" for x in norm]
         return [f"background-color: {c}" for c in colors]
@@ -273,37 +322,47 @@ def server(input, output, session):
     @output
     @render.ui
     def styled_table():
-        if not input.week_filter():
-            return 
-        
-        if not input.position_filter():
+        if not input.week_filter() or not input.position_filter():
             return
-        
+
         d = filtered_data()
 
         z_suffix = "_z-score"
-        z_cols   = [c for c in d.columns if c.endswith(z_suffix)]
+        z_cols = [c for c in d.columns if c.endswith(z_suffix)]
         base_cols = [c[:-len(z_suffix)] for c in z_cols if c[:-len(z_suffix)] in d.columns]
 
-        # we will show the table WITHOUT z-score columns
+        # Drop z-score columns from what we display
         d_no_z = d.drop(columns=z_cols, errors="ignore")
+
+        # Apply user column selection
+        selected = input.column_select() or []
+        selected = ["player_display_name", "position", "season", "week"] + list(selected)
+        selected = [c for c in selected if c in d_no_z.columns]
+        if not selected:
+            return ui.HTML("<em>No columns selected.</em>")
+
+        d_no_z = d_no_z[selected]
 
         sty = d_no_z.style.hide(axis="index")
 
-        # apply PER-COLUMN styles from its z-score series (aligned by index)
+        # helper stays the same
         def color_by_z(series: pd.Series, z: pd.Series) -> list[str]:
             return _bg_from_z(z.reindex(series.index))
 
-        for base in base_cols:
+        # Only style columns that are BOTH:
+        #   1) visible (selected), and
+        #   2) have a matching z-score column present in d
+        to_style = [b for b in base_cols if b in selected and f"{b}{z_suffix}" in d.columns]
+
+        for base in to_style:
             zcol = f"{base}{z_suffix}"
-            if zcol not in d.columns:
-                continue
-            z = d.loc[d_no_z.index, zcol]             # align to the displayed rows
-            # IMPORTANT: axis=0 (column-wise) and a proper subset to avoid row broadcast
+            # sanitize z (inf -> NaN) and align to visible rows
+            z = d.loc[d_no_z.index, zcol].replace([np.inf, -np.inf], np.nan)
             sty = sty.apply(color_by_z, axis=0, subset=pd.IndexSlice[:, [base]], z=z)
 
         sty = sty.format(precision=2)
         return ui.HTML(sty.to_html())
+
 
     # keep your raw grid too if you want
     @output
