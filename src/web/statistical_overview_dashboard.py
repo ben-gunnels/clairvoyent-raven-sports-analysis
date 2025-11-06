@@ -196,6 +196,8 @@ if not df_cached:
 
     from collections import defaultdict
     targets = [f"{prefix} {target}" for target in utils.TARGET_TRANSLATION.values() for prefix in ["True", "Projected", "Average", "STD", "Risk Quotient"]]
+    # Add the projection error to the targets, use that to color the projection values
+    targets += ["Error Points", "True Points", "Projected Points"]
     descriptive_stats = defaultdict(dict)
 
     for col in targets:
@@ -285,11 +287,7 @@ app_ui = ui.page_fluid(
         ui.card(
             ui.card_header("Colorized (by z-score)"),
             ui.output_ui("styled_table"),
-        ),
-        # ui.card(
-        #     ui.card_header("Raw grid"),
-        #     ui.output_data_frame("filtered_table"),
-        # ),
+        )
     )
 )
 
@@ -319,7 +317,8 @@ def server(input, output, session):
         s_name = zvals.name
 
         sign = 1
-        if "Risk Quotient" in s_name:
+        
+        if any(sub in s_name for sub in ["Risk Quotient", "Error Points"]):
             sign = -1
 
         vmax = np.nanmax(np.abs(zvals.values)) if len(zvals) else 1.0
@@ -369,20 +368,17 @@ def server(input, output, session):
         to_style = [b for b in base_cols if b in selected and f"{b}{z_suffix}" in d.columns]
 
         for base in to_style:
-            zcol = f"{base}{z_suffix}"
+            if base == "Projected Points":
+                # Alias to the error z-score column
+                zcol = f"Error Points{z_suffix}"
+            else:
+                zcol = f"{base}{z_suffix}"
             # sanitize z (inf -> NaN) and align to visible rows
-            z = d.loc[d_no_z.index, zcol].replace([np.inf, -np.inf], np.nan)
+            z = d.loc[d_no_z.index, zcol].replace([np.inf, -np.inf], np.nan) 
             sty = sty.apply(color_by_z, axis=0, subset=pd.IndexSlice[:, [base]], z=z)
 
         sty = sty.format(precision=2)
         return ui.HTML(sty.to_html())
-
-
-    # keep your raw grid too if you want
-    @output
-    @render.data_frame
-    def filtered_table():
-        return render.DataGrid(filtered_data(), filters=True)
 
 # -------------------------------------------------------------------
 # App entrypoint

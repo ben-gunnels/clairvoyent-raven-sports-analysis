@@ -127,5 +127,6 @@ def compile_player_points_and_projections(df: pd.DataFrame) -> pd.DataFrame:
 
     df["Projected Points"] = df[weights_proj.index].mul(weights_proj, axis=1).sum(axis=1)
     df["True Points"] = df[weights_true.index].mul(weights_true, axis=1).sum(axis=1)
+    df["Error Points"] = (df["True Points"] - df["Projected Points"]).abs()
     return df
 
