@@ -5,9 +5,6 @@ import numpy as np
 import pandas as pd
 from functools import reduce
 from shiny import App, reactive, render, ui
-
-
-
 from dotenv import load_dotenv 
 load_dotenv()
 
@@ -95,7 +92,7 @@ def assemble_combined_df(
         tmp[f"Projected {utils.TARGET_TRANSLATION[target]}"] = pd.Series(pred_series).reindex(df.index).to_numpy()
         tmp[f"Average {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"]
         tmp[f"STD {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"]
-        tmp[f"Risk Quotient {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"] / df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"]
+        tmp[f"Risk Quotient {utils.TARGET_TRANSLATION[target]}"] = df[f"{utils.TARGET_TRANSLATION[target]}_cum_avg_copy"] / df[f"{utils.TARGET_TRANSLATION[target]}_cum_std_copy"].replace(0, np.nan)
 
         metric_frames.append(tmp)
 
@@ -160,7 +157,10 @@ def assemble_combined_df(
 
     combined = combined.drop_duplicates(subset=["season", "week", "player_display_name"])
 
+    combined = utils.compile_player_points_and_projections(combined)
+
     return combined.reset_index(drop=True)
+
 
 # -----------------------------------------------------------------------------
 # Load Persistent DataFrames
@@ -202,7 +202,6 @@ if not df_cached:
         descriptive_stats[col]["mean"] = combined_df.groupby("position")[col].mean()
         descriptive_stats[col]["std"] = combined_df.groupby("position")[col].std()
 
-
     for col in targets:
         means = descriptive_stats[col]["mean"]                     # Series indexed by position
         stds  = descriptive_stats[col]["std"].replace(0, np.nan)   # avoid div-by-0
@@ -231,8 +230,20 @@ sort_by_columns = [
     "True passing_yards", 
     "Projected passing_yards",
     "Average passing_yards",
-    "Risk Quotient passing_yards"
+    "Risk Quotient passing_yards",
+    "Projected Points"
 ]
+
+standard_player_columns = [
+    "True Points", 
+    "Projected Points"
+]
+
+column_ref = {
+    "passing": [f"{prefix} {stat}" for stat in["passing_yards", "passing_interceptions", "passing_tds"] for prefix in ["True", "Projected", "Average", "Risk Quotient"]] + standard_player_columns,
+    "rushing": [f"{prefix} {stat}" for stat in["rushing_yards", "rushing_tds", "rushing_fumbles_lost"] for prefix in ["True", "Projected", "Average", "Risk Quotient"]] + standard_player_columns,
+    "receiving": [f"{prefix} {stat}" for stat in["receiving_yards", "receiving_tds", "receiving_fumbles_lost"] for prefix in ["True", "Projected", "Average", "Risk Quotient"]] + standard_player_columns
+}
 
 app_ui = ui.page_fluid(
     ui.h2("2024 NFL Weekly Player Stats with Projections"),
@@ -266,7 +277,7 @@ app_ui = ui.page_fluid(
             ui.input_selectize(
                 "column_select",
                 "Columns to display",
-                choices=sorted([c for c in combined_df.columns if not c.endswith("_z-score")]),
+                choices=list(column_ref.keys()),
                 multiple=True,
                 selected=["True rushing_yards", "Projected rushing_yards"]
             ),
@@ -308,7 +319,7 @@ def server(input, output, session):
         s_name = zvals.name
 
         sign = 1
-        if "STD" in s_name or "Risk Quotient" in s_name:
+        if "Risk Quotient" in s_name:
             sign = -1
 
         vmax = np.nanmax(np.abs(zvals.values)) if len(zvals) else 1.0
@@ -335,8 +346,11 @@ def server(input, output, session):
         d_no_z = d.drop(columns=z_cols, errors="ignore")
 
         # Apply user column selection
-        selected = input.column_select() or []
-        selected = ["player_display_name", "position", "season", "week"] + list(selected)
+        added_cols = []
+        selected = list(input.column_select()) or []
+        for cat in selected:
+            added_cols += column_ref[cat]
+        selected = ["player_display_name", "position", "season", "week"] + added_cols
         selected = [c for c in selected if c in d_no_z.columns]
         if not selected:
             return ui.HTML("<em>No columns selected.</em>")

@@ -3,6 +3,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Optional
+from .data_descriptions.StatProjections import POSITION_PLAYER_STAT_PROJECTION_DATA_DICT
 
 def safe_json_load(path: str | Path, default: Optional[Any] = None) -> Any:
     """
@@ -105,3 +106,26 @@ def describe_endpoint(name, df):
     buf.append("-"*50)
     buf.append("\n")  # blank line between endpoints
     return "\n".join(buf)
+
+def compile_player_points_and_projections(df: pd.DataFrame) -> pd.DataFrame:
+    """Takes a dataframe with projected stats and adds a column for projected fantasy points.
+    """
+    projection_cols = [f"Projected {col}" for col in POSITION_PLAYER_STAT_PROJECTION_DATA_DICT.keys()]
+    for col in projection_cols:
+        if col not in df.columns:
+            raise KeyError(f"Key: {col} not in the dataframe's columns.")
+    
+    weights_proj = pd.Series(
+        [val["weight"] for val in POSITION_PLAYER_STAT_PROJECTION_DATA_DICT.values()],
+        index=[f"Projected {key}" for key in POSITION_PLAYER_STAT_PROJECTION_DATA_DICT.keys()]
+    )
+
+    weights_true = pd.Series(
+        [val["weight"] for val in POSITION_PLAYER_STAT_PROJECTION_DATA_DICT.values()],
+        index=[f"True {key}" for key in POSITION_PLAYER_STAT_PROJECTION_DATA_DICT.keys()]
+    )
+
+    df["Projected Points"] = df[weights_proj.index].mul(weights_proj, axis=1).sum(axis=1)
+    df["True Points"] = df[weights_true.index].mul(weights_true, axis=1).sum(axis=1)
+    return df
+
