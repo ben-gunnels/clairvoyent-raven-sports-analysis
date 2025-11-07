@@ -263,3 +263,59 @@ player_2023_stats = pfr_api.get_player_stats(name=example_player, season='2023')
 
 ---
 
+
+## NFLDataPy (Wrapper)
+
+**Description**  
+Thin wrapper around `nflreadpy` that provides convenient access to nfl-data-py and nflverse data. 
+The api defaults to returning a polars dataframe, but this wrapper returns a pandas dataframe.
+
+---
+
+### Argument Conventions
+
+| Parameter       | Type                           | Description |
+|-----------------|--------------------------------|-------------|
+| **years**       | `YearsLike`                    | Union/[int, str/]. Checks that the year is valid 1999-2025|
+| **ranking_type**  | `Literal['draft','week','all']`| Defines the scope for fantasy player ranking|
+| **stat_type**  | `Literal['weekly','pbp_pass','pbp_rush']`| Defines the scope for fantasy opportunity stats|
+
+---
+
+## API Namespaces & Methods
+
+### `NFLDataPy`
+
+Wrapper around `nflreaderpy`, returning `pandas.DataFrame` in many cases:
+
+### 🏈 `NFLDataPy` API Reference
+
+| Category                           | Method                                                                                                                                                                       | Returns        | Description                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| **Play-by-play / Columns**         | `load_play_by_play_data(years: YearsLike \| None = None)`                                                                                                                    | `pd.DataFrame` | Play-by-play (PBP) data for the given seasons. Years can be a single year, range, or iterable. |
+| **Weekly Data**                    | `load_player_stats(years: YearsLike \| None = None, summary_level: Literal['week','reg','post','reg+post']="week")`                                                          | `pd.DataFrame` | Player statistics at weekly or seasonal summary levels.                                        |
+|                                    | `load_team_stats(years: YearsLike \| None = None, summary_level: Literal['week','reg','post','reg+post']="week")`                                                            | `pd.DataFrame` | Team statistics at weekly or seasonal summary levels.                                          |
+| **Rosters / Schedules / Metadata** | `load_schedules(years: YearsLike \| None = None)`                                                                                                                            | `pd.DataFrame` | League schedules by week and season.                                                           |
+|                                    | `load_players(years: YearsLike \| None = None)`                                                                                                                              | `pd.DataFrame` | Player metadata and IDs for the given seasons.                                                 |
+|                                    | `load_weekly_rosters(years: YearsLike \| None = None)`                                                                                                                       | `pd.DataFrame` | Weekly roster snapshots for each team.                                                         |
+|                                    | `load_snap_counts(years: YearsLike \| None = None)`                                                                                                                          | `pd.DataFrame` | Weekly offensive/defensive snap counts.                                                        |
+|                                    | `load_nextgen_stats(years: YearsLike \| None = None, stat_type: Literal['passing','receiving','rushing']="passing")`                                                         | `pd.DataFrame` | Next Gen Stats by stat type (passing, receiving, rushing).                                     |
+|                                    | `load_ftn_charting(years: YearsLike \| None = None)`                                                                                                                         | `pd.DataFrame` | FTN charting data (route/target-level charting).                                               |
+|                                    | `load_participation(years: YearsLike \| None = None)`                                                                                                                        | `pd.DataFrame` | Player participation (active/inactive and play involvement).                                   |
+|                                    | `import_draft_picks(years: YearsLike \| None = None)`                                                                                                                        | `pd.DataFrame` |      |
+|                                    | `import_draft_values(years: YearsLike \| None = None)`                                                                                                                       | `pd.DataFrame` |                      |
+|                                    | `load_injuries(years: YearsLike \| None = None)`                                                                                                                             | `pd.DataFrame` | Player injury reports.                                                                         |
+|                                    | `load_contracts()`                                                                                                                                                           | `pd.DataFrame` | Player contract information.                                                                   |
+|                                    | `load_officials(years: YearsLike \| None = None)`                                                                                                                            | `pd.DataFrame` | Game officials data.                                                                           |
+|                                    | `load_combine(years: YearsLike \| None = None)`                                                                                                                              | `pd.DataFrame` | NFL Combine results.                                                                           |
+|                                    | `load_depth_charts(years: YearsLike \| None = None)`                                                                                                                         | `pd.DataFrame` | Team depth charts by week/season.                                                              |
+|                                    | `load_trades()`                                                                                                                                                              | `pd.DataFrame` | Historical trades.                                                                             |
+| **Fantasy Football Data**          | `load_fantasy_playerids()`                                                                                                                                                   | `pd.DataFrame` | Cross-platform fantasy player ID mapping.                                                      |
+|                                    | `load_fantasy_rankings(ranking_type: Literal['draft','week','all']="draft")`                                                                                                 | `pd.DataFrame` | Fantasy rankings by requested type (draft, weekly, all).                                       |
+|                                    | `load_fantasy_opportunity(years: YearsLike \| None = None, stat_type: Literal['weekly','pbp_pass','pbp_rush']="weekly", model_version: Literal['latest','v1.0.0']="latest")` | `pd.DataFrame` | Fantasy opportunity metrics (expected stats) for given seasons.                                |
+| **Utility Functions**              | `clear_cache(pattern: str \| None = None)`                                                                                                                                   | `Any`          | Clears cached data optionally filtered by pattern.                                             |
+|                                    | `get_current_season(roster: bool = False)`                                                                                                                                   | `pd.DataFrame` | Returns current season info (or full roster data if `roster=True`).                            |
+|                                    | `get_current_week()`                                                                                                                                                         | `pd.DataFrame` | Returns the current week number for the NFL season.                                            |
+
+---
+

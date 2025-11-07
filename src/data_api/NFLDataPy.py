@@ -133,20 +133,14 @@ class NFLDataPy:
         return nfl.load_participation(yrs).to_pandas()
     
 
-    def import_draft_picks(
-        self, 
-        years: YearsLike | None = None
-    ) -> pd.DataFrame:
+    def import_draft_picks(self, years: YearsLike | None = None) -> pd.DataFrame:
         yrs = _normalize_years(years)
-        return nfl.load_participation(yrs).to_pandas()
+        return nfl.load_draft_picks(yrs).to_pandas()
 
+    def import_draft_values(self, years: YearsLike | None = None) -> pd.DataFrame:
+        yrs = _normalize_years(years)
+        return nfl.load_draft_values(yrs).to_pandas()
 
-    def import_draft_values(
-        self, 
-        years: YearsLike | None = None
-    ) -> pd.DataFrame:
-        return nfl.load_draft_picks(years).to_pandas()
-    
 
     def load_injuries(
         self,
@@ -222,12 +216,9 @@ class NFLDataPy:
         return nfl.clear_cache(pattern)
 
     
-    def get_current_season(
-        self,
-        roster: bool = False
-    ) -> pd.DataFrame:
-        return nfl.get_current_season(roster).to_pandas()
-    
+    def get_current_week(self) -> int:
+        return nfl.get_current_week()
 
-    def get_current_week(self) -> pd.DataFrame:
-        return nfl.get_current_week().to_pandas()
+    def get_current_season(self, roster: bool = False) -> int | pd.DataFrame:
+        result = nfl.get_current_season(roster)
+        return result if isinstance(result, int) else result.to_pandas()
